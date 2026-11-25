@@ -46,7 +46,13 @@ async def test_native_conversation_fallback(
 
     user_input = MagicMock(spec=conversation.ConversationInput)
     chat_log = MagicMock(spec=conversation.ChatLog)
-    chat_log.content = []
+    original_content = [
+        conversation.SystemContent(content="System"),
+        conversation.UserContent(content="Previous question"),
+        conversation.AssistantContent(agent_id="homeassistant", content="Previous answer"),
+        conversation.UserContent(content="Current question"),
+    ]
+    chat_log.content = original_content.copy()
     chat_log.conversation_id = "test_conversation_id"
     chat_log.async_provide_llm_data = AsyncMock()
     response = intent.IntentResponse(language="en")
@@ -86,3 +92,9 @@ async def test_native_conversation_fallback(
     assert converse.await_count == int(bool(enabled))
     assert entity._async_handle_chat_log.await_count == int(fallback)
     assert result is (llm_result if fallback else native_result)
+    if fallback:
+        assert chat_log.content == original_content
+    else:
+        assert chat_log.content[: len(original_content)] == original_content
+        assert chat_log.content[-1].content == "Native"
+        assert len(chat_log.content) == len(original_content) + 1 + int(executed)

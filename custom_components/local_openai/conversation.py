@@ -139,6 +139,9 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
             ):
                 return native_result
 
+            # Discard the failed native response before handing off to the LLM.
+            del chat_log.content[content_start:]
+
         hass_apis = [api.id for api in llm.async_get_apis(self.hass)]
 
         # Filter out any tool providers that no longer exist
