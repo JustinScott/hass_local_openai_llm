@@ -131,6 +131,22 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
 
         if native_response is None:
             _LOGGER.debug("Native state query returned no match")
+            if _LOGGER.isEnabledFor(logging.DEBUG):
+                recognize = getattr(native_agent, "async_recognize_intent", None)
+                if recognize is not None:
+                    try:
+                        for strict in (True, False):
+                            match = await recognize(
+                                user_input, strict_intents_only=strict
+                            )
+                            _LOGGER.debug(
+                                "Native recognition strict=%s: intent=%s, slots=%s",
+                                strict,
+                                getattr(getattr(match, "intent", None), "name", None),
+                                getattr(match, "entities", None),
+                            )
+                    except Exception:
+                        _LOGGER.exception("Error diagnosing native recognition")
             return None
         if native_response.response_type is not intent.IntentResponseType.QUERY_ANSWER:
             _LOGGER.debug(
