@@ -114,6 +114,7 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
         )
         handle_intents = getattr(native_agent, "async_handle_intents", None)
         if handle_intents is None:
+            _LOGGER.debug("Native state query handler unavailable")
             return None
 
         try:
@@ -128,11 +129,17 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
             _LOGGER.exception("Error handling native state query")
             return None
 
-        if (
-            native_response is None
-            or native_response.response_type is not intent.IntentResponseType.QUERY_ANSWER
-        ):
+        if native_response is None:
+            _LOGGER.debug("Native state query returned no match")
             return None
+        if native_response.response_type is not intent.IntentResponseType.QUERY_ANSWER:
+            _LOGGER.debug(
+                "Native state query fallback: response type %s",
+                native_response.response_type,
+            )
+            return None
+
+        _LOGGER.debug("Native state query handled without LLM inference")
 
         speech: str = native_response.speech.get("plain", {}).get("speech", "")
         chat_log.async_add_assistant_content_without_tools(
@@ -163,12 +170,14 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
         if options.get(
             CONF_EXTENDED_LOCAL_STATE_QUERIES, CONF_EXTENDED_LOCAL_STATE_QUERIES_DEFAULT
         ):
+            _LOGGER.debug("Attempting native state query")
             native_result = await self._async_try_native_state_query(
                 user_input, chat_log, always_continue_conversation,
             )
             if native_result is not None:
                 return native_result
 
+        _LOGGER.debug("Continuing with LLM conversation handling")
         hass_apis = [api.id for api in llm.async_get_apis(self.hass)]
 
         # Filter out any tool providers that no longer exist
