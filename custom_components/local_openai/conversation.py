@@ -113,40 +113,69 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
             self.hass, conversation.HOME_ASSISTANT_AGENT
         )
         handle_intents = getattr(native_agent, "async_handle_intents", None)
+        debug = _LOGGER.isEnabledFor(logging.DEBUG)
+        if debug:
+            _LOGGER.debug(
+                "Native query input: text=%r language=%s agent=%s device=%s "
+                "satellite=%s conversation=%s native_agent=%s",
+                user_input.text,
+                user_input.language,
+                user_input.agent_id,
+                getattr(user_input, "device_id", None),
+                getattr(user_input, "satellite_id", None),
+                user_input.conversation_id,
+                type(native_agent).__name__,
+            )
         if handle_intents is None:
             _LOGGER.debug("Native state query handler unavailable")
             return None
 
+        def filter_intent(match: object) -> bool:
+            intent_name = getattr(getattr(match, "intent", None), "name", None)
+            rejected = intent_name != intent.INTENT_GET_STATE
+            _LOGGER.debug(
+                "Native intent filter: intent=%s rejected=%s entities=%s",
+                intent_name,
+                rejected,
+                getattr(match, "entities", None),
+            )
+            return rejected
+
         try:
-            # Exclude all intents except read-only state queries.
             native_response = await handle_intents(
-                user_input,
-                chat_log,
-                intent_filter=lambda match: match.intent.name
-                != intent.INTENT_GET_STATE,
+                user_input, chat_log, intent_filter=filter_intent
             )
         except Exception:
             _LOGGER.exception("Error handling native state query")
             return None
 
+        if debug:
+            _LOGGER.debug(
+                "Native handler response: type=%s error=%s speech=%s",
+                getattr(native_response, "response_type", None),
+                getattr(native_response, "error_code", None),
+                getattr(native_response, "speech", None),
+            )
+
         if native_response is None:
             _LOGGER.debug("Native state query returned no match")
-            if _LOGGER.isEnabledFor(logging.DEBUG):
+            if debug:
                 recognize = getattr(native_agent, "async_recognize_intent", None)
                 if recognize is not None:
-                    try:
-                        for strict in (True, False):
+                    for strict in (True, False):
+                        try:
                             match = await recognize(
                                 user_input, strict_intents_only=strict
                             )
                             _LOGGER.debug(
-                                "Native recognition strict=%s: intent=%s, slots=%s",
+                                "Native recognition strict=%s: result=%r",
                                 strict,
-                                getattr(getattr(match, "intent", None), "name", None),
-                                getattr(match, "entities", None),
+                                match,
                             )
-                    except Exception:
-                        _LOGGER.exception("Error diagnosing native recognition")
+                        except Exception:
+                            _LOGGER.exception(
+                                "Error diagnosing native recognition strict=%s", strict
+                            )
             return None
         if native_response.response_type is not intent.IntentResponseType.QUERY_ANSWER:
             _LOGGER.debug(
