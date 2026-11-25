@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal
 
 from homeassistant.components import conversation
 from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
-from homeassistant.helpers import llm
+from homeassistant.helpers import intent, llm
 
 from .const import (
     CONF_ALWAYS_CONTINUE_CONVERSATION,
     CONF_ALWAYS_CONTINUE_CONVERSATION_DEFAULT,
+    CONF_EXTENDED_LOCAL_STATE_QUERIES,
+    CONF_EXTENDED_LOCAL_STATE_QUERIES_DEFAULT,
     CONF_PARALLEL_TOOL_CALLS,
     CONF_SERVER_TYPE,
     DOMAIN,
@@ -31,6 +34,9 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
     from . import LocalAiConfigEntry
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _get_conversation_entity(
@@ -96,6 +102,103 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
         """Return a list of supported languages."""
         return MATCH_ALL
 
+    async def _async_try_native_state_query(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        continue_conversation: bool,
+    ) -> conversation.ConversationResult | None:
+        """Handle only native HassGetState matches without an LLM request."""
+        native_agent = conversation.async_get_agent(
+            self.hass, conversation.HOME_ASSISTANT_AGENT
+        )
+        handle_intents = getattr(native_agent, "async_handle_intents", None)
+        debug = _LOGGER.isEnabledFor(logging.DEBUG)
+        if debug:
+            _LOGGER.debug(
+                "Native query input: text=%r language=%s agent=%s device=%s "
+                "satellite=%s conversation=%s native_agent=%s",
+                user_input.text,
+                user_input.language,
+                user_input.agent_id,
+                getattr(user_input, "device_id", None),
+                getattr(user_input, "satellite_id", None),
+                user_input.conversation_id,
+                type(native_agent).__name__,
+            )
+        if handle_intents is None:
+            _LOGGER.debug("Native state query handler unavailable")
+            return None
+
+        def filter_intent(match: object) -> bool:
+            intent_name = getattr(getattr(match, "intent", None), "name", None)
+            rejected = intent_name != intent.INTENT_GET_STATE
+            _LOGGER.debug(
+                "Native intent filter: intent=%s rejected=%s entities=%s",
+                intent_name,
+                rejected,
+                getattr(match, "entities", None),
+            )
+            return rejected
+
+        try:
+            native_response = await handle_intents(
+                user_input, chat_log, intent_filter=filter_intent
+            )
+        except Exception:
+            _LOGGER.exception("Error handling native state query")
+            return None
+
+        if debug:
+            _LOGGER.debug(
+                "Native handler response: type=%s error=%s speech=%s",
+                getattr(native_response, "response_type", None),
+                getattr(native_response, "error_code", None),
+                getattr(native_response, "speech", None),
+            )
+
+        if native_response is None:
+            _LOGGER.debug("Native state query returned no match")
+            if debug:
+                recognize = getattr(native_agent, "async_recognize_intent", None)
+                if recognize is not None:
+                    for strict in (True, False):
+                        try:
+                            match = await recognize(
+                                user_input, strict_intents_only=strict
+                            )
+                            _LOGGER.debug(
+                                "Native recognition strict=%s: result=%r",
+                                strict,
+                                match,
+                            )
+                        except Exception:
+                            _LOGGER.exception(
+                                "Error diagnosing native recognition strict=%s", strict
+                            )
+            return None
+        if native_response.response_type is not intent.IntentResponseType.QUERY_ANSWER:
+            _LOGGER.debug(
+                "Native state query fallback: response type %s",
+                native_response.response_type,
+            )
+            return None
+
+        _LOGGER.debug("Native state query handled without LLM inference")
+
+        speech: str = native_response.speech.get("plain", {}).get("speech", "")
+        chat_log.async_add_assistant_content_without_tools(
+            conversation.AssistantContent(
+                agent_id=user_input.agent_id,
+                content=speech,
+            )
+        )
+        return conversation.ConversationResult(
+            response=native_response,
+            conversation_id=chat_log.conversation_id,
+            continue_conversation=continue_conversation,
+        )
+
     async def _async_handle_message(
         self,
         user_input: conversation.ConversationInput,
@@ -109,6 +212,17 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
             CONF_ALWAYS_CONTINUE_CONVERSATION, CONF_ALWAYS_CONTINUE_CONVERSATION_DEFAULT
         )
 
+        if options.get(
+            CONF_EXTENDED_LOCAL_STATE_QUERIES, CONF_EXTENDED_LOCAL_STATE_QUERIES_DEFAULT
+        ):
+            _LOGGER.debug("Attempting native state query")
+            native_result = await self._async_try_native_state_query(
+                user_input, chat_log, always_continue_conversation,
+            )
+            if native_result is not None:
+                return native_result
+
+        _LOGGER.debug("Continuing with LLM conversation handling")
         hass_apis = [api.id for api in llm.async_get_apis(self.hass)]
 
         # Filter out any tool providers that no longer exist

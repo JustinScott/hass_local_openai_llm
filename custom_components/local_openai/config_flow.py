@@ -90,6 +90,8 @@ from .const import (
     CONF_AI_TASK_TOOLS_SECTION,
     CONF_ALWAYS_CONTINUE_CONVERSATION,
     CONF_ALWAYS_CONTINUE_CONVERSATION_DEFAULT,
+    CONF_EXTENDED_LOCAL_STATE_QUERIES,
+    CONF_EXTENDED_LOCAL_STATE_QUERIES_DEFAULT,
     CONF_BASE_URL,
     CONF_CHAT_TEMPLATE_KWARGS,
     CONF_CHAT_TEMPLATE_OPTS,
@@ -670,6 +672,10 @@ class ConversationFlowHandler(LocalAiSubentryFlowHandler):
             vol.Required(
                 CONF_ALWAYS_CONTINUE_CONVERSATION,
                 default=CONF_ALWAYS_CONTINUE_CONVERSATION_DEFAULT,
+            ): bool,
+            vol.Optional(
+                CONF_EXTENDED_LOCAL_STATE_QUERIES,
+                default=CONF_EXTENDED_LOCAL_STATE_QUERIES_DEFAULT,
             ): bool,
             vol.Optional(
                 CONF_TEMPERATURE,
