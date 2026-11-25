@@ -118,7 +118,8 @@
             "max_message_history": "Max previous conversation rounds to include",
             "parallel_tool_calls": "Parallel tool calling",
             "content_injection_method": "Context injection role",
-            "always_continue_conversation": "Always continue conversation"
+            "always_continue_conversation": "Always continue conversation",
+            "native_conversation_fallback": "Prefer native Home Assistant conversation"
           },
           "data_description": {
             "model": "The model to use for the conversation agent",
@@ -127,7 +128,8 @@
             "parallel_tool_calls": "Allow the model to use multiple tools in a single turn",
             "temperature": "Lower for more predictable responses, higher for more randomness",
             "content_injection_method": "The message role to insert dynamic content as. See the readme for details",
-            "always_continue_conversation": "Voice assistants will always be prompted to continue the conversation"
+            "always_continue_conversation": "Voice assistants will always be prompted to continue the conversation",
+            "native_conversation_fallback": "Try the native conversation agent before the LLM and fall back on recognition failures"
           },
           "sections": {
             "context_injection_opts": {
@@ -228,7 +230,8 @@
             "max_message_history": "Max previous conversation rounds to include",
             "parallel_tool_calls": "Parallel tool calling",
             "content_injection_method": "Context injection role",
-            "always_continue_conversation": "Always continue conversation"
+            "always_continue_conversation": "Always continue conversation",
+            "native_conversation_fallback": "Prefer native Home Assistant conversation"
           },
           "data_description": {
             "model": "The model to use for the conversation agent",
@@ -237,7 +240,8 @@
             "parallel_tool_calls": "Allow the model to use multiple tools in a single turn",
             "temperature": "Lower for more predictable responses, higher for more randomness",
             "content_injection_method": "The message role to insert dynamic content as. See the readme for details",
-            "always_continue_conversation": "Voice assistants will always be prompted to continue the conversation"
+            "always_continue_conversation": "Voice assistants will always be prompted to continue the conversation",
+            "native_conversation_fallback": "Try the native conversation agent before the LLM and fall back on recognition failures"
           },
           "sections": {
             "context_injection_opts": {

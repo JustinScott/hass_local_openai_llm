@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING, Literal
 
 from homeassistant.components import conversation
 from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
-from homeassistant.helpers import llm
+from homeassistant.helpers import intent, llm
 
 from .const import (
     CONF_ALWAYS_CONTINUE_CONVERSATION,
     CONF_ALWAYS_CONTINUE_CONVERSATION_DEFAULT,
+    CONF_NATIVE_CONVERSATION_FALLBACK,
+    CONF_NATIVE_CONVERSATION_FALLBACK_DEFAULT,
     CONF_PARALLEL_TOOL_CALLS,
     CONF_SERVER_TYPE,
     DOMAIN,
@@ -108,6 +110,34 @@ class LocalAiConversationEntity(LocalAiEntity, conversation.ConversationEntity):
         always_continue_conversation = options.get(
             CONF_ALWAYS_CONTINUE_CONVERSATION, CONF_ALWAYS_CONTINUE_CONVERSATION_DEFAULT
         )
+
+        if options.get(
+            CONF_NATIVE_CONVERSATION_FALLBACK,
+            CONF_NATIVE_CONVERSATION_FALLBACK_DEFAULT,
+        ):
+            content_start = len(chat_log.content)
+            native_result = await conversation.async_converse(
+                self.hass,
+                text=user_input.text,
+                conversation_id=chat_log.conversation_id,
+                context=user_input.context,
+                language=user_input.language,
+                agent_id=conversation.HOME_ASSISTANT_AGENT,
+                device_id=user_input.device_id,
+                satellite_id=user_input.satellite_id,
+            )
+            if native_result.response.error_code not in (
+                intent.IntentResponseErrorCode.NO_INTENT_MATCH,
+                intent.IntentResponseErrorCode.NO_VALID_TARGETS,
+            ) or any(
+                isinstance(content, conversation.ToolResultContent)
+                or (
+                    isinstance(content, conversation.AssistantContent)
+                    and content.tool_calls
+                )
+                for content in chat_log.content[content_start:]
+            ):
+                return native_result
 
         hass_apis = [api.id for api in llm.async_get_apis(self.hass)]
 
