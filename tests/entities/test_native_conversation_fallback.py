@@ -49,7 +49,9 @@ async def test_native_conversation_fallback(
     original_content = [
         conversation.SystemContent(content="System"),
         conversation.UserContent(content="Previous question"),
-        conversation.AssistantContent(agent_id="homeassistant", content="Previous answer"),
+        conversation.AssistantContent(
+            agent_id="homeassistant", content="Previous answer"
+        ),
         conversation.UserContent(content="Current question"),
     ]
     chat_log.content = original_content.copy()
